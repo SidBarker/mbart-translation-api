@@ -4,15 +4,34 @@ import os
 import torch
 import logging
 import sys
+import time
 from transformers import MBartForConditionalGeneration, MBart50TokenizerFast
 import glob
 
 # Configure logging
+log_level = os.environ.get("RUNPOD_DEBUG_LEVEL", "info").upper()
+if log_level == "DEBUG":
+    level = logging.DEBUG
+elif log_level == "WARNING":
+    level = logging.WARNING
+elif log_level == "ERROR":
+    level = logging.ERROR
+else:
+    level = logging.INFO
+
 logging.basicConfig(
-    level=logging.INFO,
+    level=level,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# Log startup information
+logger.info("------ Starting RunPod Serverless Translation Handler ------")
+logger.info(f"CUDA available: {torch.cuda.is_available()}")
+if torch.cuda.is_available():
+    logger.info(f"CUDA device count: {torch.cuda.device_count()}")
+    logger.info(f"CUDA current device: {torch.cuda.current_device()}")
+    logger.info(f"CUDA device name: {torch.cuda.get_device_name(0)}")
 
 # Get environment variables
 DEFAULT_MODEL_ID = "facebook/mbart-large-50-many-to-many-mmt"
@@ -55,10 +74,20 @@ except ImportError as e:
 # Load models at module startup time (not in the handler)
 # This ensures the model is loaded only once when the serverless function starts
 try:
+    start_time = time.time()
     logger.info("Loading tokenizer and model...")
     tokenizer = MBart50TokenizerFast.from_pretrained(MODEL_PATH)
     model = MBartForConditionalGeneration.from_pretrained(MODEL_PATH).to(DEVICE)
-    logger.info(f"Model loaded successfully on {DEVICE}")
+    load_time = time.time() - start_time
+    logger.info(f"Model loaded successfully on {DEVICE} in {load_time:.2f} seconds")
+    
+    # Optional: Optimize model for inference if using CUDA
+    if DEVICE == "cuda":
+        model = model.eval()  # Set to evaluation mode
+        # Use mixed precision for faster inference if using newer GPUs
+        if torch.cuda.get_device_capability()[0] >= 7:
+            logger.info("Using mixed precision for inference")
+            model = model.half()  # Convert to FP16 for faster inference on Volta+ GPUs
 except Exception as e:
     logger.error(f"Error loading model: {e}")
     raise
@@ -78,6 +107,8 @@ def handler(event):
         dict: The response object containing the translation result
     """
     try:
+        start_time = time.time()
+        
         # Get input data
         input_data = event.get("input", {})
         
@@ -95,12 +126,15 @@ def handler(event):
         logger.info(f"Processing translation request: {target_lang=}, text length: {len(text)}, {source_lang=}")
         
         # Auto-detect source language if not provided
+        detection_time = 0
         is_detected = False
         if not source_lang:
+            detection_start = time.time()
             try:
                 source_lang = detect_language(text)
                 is_detected = True
-                logger.info(f"Auto-detected language: {source_lang}")
+                detection_time = time.time() - detection_start
+                logger.info(f"Auto-detected language: {source_lang} in {detection_time:.2f} seconds")
             except Exception as e:
                 logger.error(f"Language detection failed: {e}")
                 return {"error": f"Language detection failed: {str(e)}"}
@@ -124,7 +158,10 @@ def handler(event):
         max_length = 512  # Safe maximum for most models
         input_text = text[:max_length] if len(text) > max_length else text
         
+        tokenize_start = time.time()
         encoded_text = tokenizer(input_text, return_tensors="pt")
+        tokenize_time = time.time() - tokenize_start
+        
         forced_bos_token_id = tokenizer.lang_code_to_id.get(full_target_lang)
         
         if forced_bos_token_id is None:
@@ -135,6 +172,7 @@ def handler(event):
             encoded_text = {key: value.to(DEVICE) for key, value in encoded_text.items()}
         
         # Generate translation using torch.no_grad() for memory efficiency
+        generate_start = time.time()
         with torch.no_grad():
             generated_tokens = model.generate(
                 **encoded_text,
@@ -142,9 +180,20 @@ def handler(event):
                 max_length=1024,  # Safe maximum for output length
                 num_beams=4,      # Beam search for better quality
             )
+        generate_time = time.time() - generate_start
         
         # Decode the translation
+        decode_start = time.time()
         translated_text = tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)[0]
+        decode_time = time.time() - decode_start
+        
+        # Calculate total processing time
+        total_time = time.time() - start_time
+        
+        # Log timing details
+        logger.info(f"Translation statistics: source={source_lang}, target={target_lang}, chars={len(text)}")
+        logger.info(f"Timing: detection={detection_time:.2f}s, tokenize={tokenize_time:.2f}s, " + 
+                   f"generate={generate_time:.2f}s, decode={decode_time:.2f}s, total={total_time:.2f}s")
         
         # Return the result
         return {
@@ -152,12 +201,20 @@ def handler(event):
             "detected": is_detected,
             "target_lang": target_lang,
             "text": text,
-            "translated_text": translated_text
+            "translated_text": translated_text,
+            "stats": {
+                "total_time": round(total_time, 3),
+                "detection_time": round(detection_time, 3),
+                "translation_time": round(generate_time, 3)
+            }
         }
     
     except Exception as e:
         logger.error(f"Error in handler: {e}", exc_info=True)
         return {"error": str(e)}
+
+# Log that we're ready to start handling requests
+logger.info("RunPod handler initialization complete, ready to process requests")
 
 # Start the RunPod serverless handler
 runpod.serverless.start({"handler": handler}) 

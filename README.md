@@ -1,6 +1,6 @@
-# mBART Translation API
+# mBART Translation API for RunPod Serverless
 
-This project provides a translation API service using the mBART-large-50 model. It supports translation between 50 languages with automatic language detection.
+This project provides a translation API service optimized for RunPod.io serverless deployment using the mBART-large-50 model. It supports translation between 50 languages with automatic language detection.
 
 ## Model Information
 
@@ -10,12 +10,11 @@ The solution uses the [facebook/mbart-large-50-many-to-many-mmt](https://hugging
 
 - Automatic language detection of source text
 - Translation between any pair of 50 supported languages  
-- FastAPI-based REST API
-- GPU acceleration support
-- Docker containerization for easy deployment on RunPod.io
+- GPU acceleration optimized for RunPod.io
+- Performance metrics and detailed logging
 - Configurable debugging via environment variables
-- Optimized for RunPod.io serverless deployment
 - Automatic model downloading if local files aren't found
+- FP16 mixed precision on compatible GPUs
 
 ## Supported Languages
 
@@ -23,44 +22,23 @@ Arabic (ar_AR), Czech (cs_CZ), German (de_DE), English (en_XX), Spanish (es_XX),
 
 ## Model Loading Behavior
 
-The application can load the mBART model in two ways:
+The serverless handler can load the mBART model in two ways:
 
 1. **Local Model**: If you have the model files saved at the path specified by `MODEL_PATH` environment variable, it will load them from there.
 2. **Automatic Download**: If local model files aren't found or are incomplete, the application will automatically fall back to downloading the model from Hugging Face.
 
-For best performance (especially in serverless mode), it's recommended to pre-download the model to a persistent volume.
+For best performance, it's recommended to pre-download the model to a persistent RunPod volume.
 
-## Installation and Usage
-
-### Local Development
+## Docker Build
 
 ```bash
-git clone https://github.com/your-username/mbart-translation-api
-cd mbart-translation-api
-pip install -r requirements.txt
-# Set environment variables
-export MODEL_PATH=/path/to/model
-export DEVICE=cuda  # or cpu if no GPU available
-export DEBUG=true   # optional for debug logging
-uvicorn main:app --host 0.0.0.0 --port 3000
+docker build -t yourusername/mbart-translation-api:latest .
+docker push yourusername/mbart-translation-api:latest
 ```
 
-### Docker Build and Run
+## Pre-downloading Model Files
 
-```bash
-docker build -t mbart-translation-api .
-docker run -p 3000:3000 -v /path/to/models:/runpod-volume/models mbart-translation-api
-```
-
-### For GPU support
-
-```bash
-docker run --gpus all -p 3000:3000 -v /path/to/models:/runpod-volume/models mbart-translation-api
-```
-
-### Pre-downloading Model Files
-
-To pre-download the model files to your volume before deploying:
+To pre-download the model files to your RunPod volume before deploying:
 
 ```bash
 # Create a directory for the model
@@ -76,7 +54,7 @@ python -c "from transformers import MBartForConditionalGeneration, MBart50Tokeni
 
 ## RunPod.io Serverless Deployment
 
-This solution is optimized for RunPod.io serverless deployment. To deploy to RunPod:
+To deploy to RunPod:
 
 1. Build and push your Docker image to a registry (Docker Hub, GHCR, etc.)
    ```bash
@@ -95,7 +73,7 @@ This solution is optimized for RunPod.io serverless deployment. To deploy to Run
    - When your template is created, deploy it as a serverless function
    - RunPod will handle scaling based on traffic
 
-### Important Note for RunPod Deployment
+### Important Notes for RunPod Deployment
 
 The first request may take longer if the model needs to be downloaded. For optimal performance:
 
@@ -105,15 +83,15 @@ The first request may take longer if the model needs to be downloaded. For optim
 
 If you don't pre-download the model, it will be downloaded automatically on first use and cached in the volume (if one is attached), or in the container's filesystem (less optimal).
 
-### Testing the RunPod Handler
+### Testing the RunPod Handler Locally
 
-You can test the handler locally before deploying to RunPod:
+Before deploying to RunPod, you can test the handler locally:
 
 ```bash
 python runpod_test.py
 ```
 
-### RunPod API Request Format
+## RunPod API Request Format
 
 When using the RunPod API endpoint, your requests should follow this format:
 
@@ -136,37 +114,25 @@ The response will be in this format:
     "detected": false,
     "target_lang": "fr",
     "text": "Hello world, how are you today?",
-    "translated_text": "Bonjour le monde, comment allez-vous aujourd'hui?"
+    "translated_text": "Bonjour le monde, comment allez-vous aujourd'hui?",
+    "stats": {
+      "total_time": 0.342,
+      "detection_time": 0,
+      "translation_time": 0.289
+    }
   }
 }
 ```
 
-## API Endpoints (Web Mode)
+## Environment Variables
 
-The API is accessible at http://localhost:3000/docs which provides Swagger UI documentation.
+The serverless handler supports the following environment variables:
 
-### Main Endpoints:
-
-1. `POST /v1/lang/translate` - Translate text between languages
-   - Auto-detects source language if not specified
-   - Requires target language and text
-
-2. `GET /v1/lang/support` - Get information about supported languages
-
-## Example Usage
-
-See `api_request.py` for example API usage:
-
-```python
-import requests
-
-# Auto-detect source language
-response = requests.post("http://localhost:3000/v1/lang/translate", 
-                         json={"target_lang": "en", "text": "Bonjour le monde"})
-print(response.json())
-
-# Specify source language
-response = requests.post("http://localhost:3000/v1/lang/translate", 
-                         json={"source_lang": "fr", "target_lang": "es", "text": "Bonjour le monde"})
-print(response.json())
-```
+| Variable | Description | Default |
+|----------|-------------|---------|
+| MODEL_PATH | Path to the model files | /runpod-volume/models |
+| DEVICE | Device to use for inference | cuda (if available) |
+| RUNPOD_DEBUG_LEVEL | Logging level (debug, info, warning, error) | info |
+| HF_HOME | Path to the Hugging Face cache | /runpod-volume/huggingface |
+| TRANSFORMERS_CACHE | Path to the Transformers cache | /runpod-volume/cache |
+| TORCH_HOME | Path to the PyTorch models | /runpod-volume/torch |

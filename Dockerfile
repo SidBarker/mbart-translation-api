@@ -10,7 +10,8 @@ ENV PYTHONUNBUFFERED=1 \
     RUNPOD_DEBUG_LEVEL=info \
     TRANSFORMERS_CACHE=/runpod-volume/cache \
     HF_HOME=/runpod-volume/huggingface \
-    TORCH_HOME=/runpod-volume/torch
+    TORCH_HOME=/runpod-volume/torch \
+    RUNPOD_SERVERLESS=1
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -81,40 +82,27 @@ if __name__ == "__main__":\n\
     download_model()\n\
 ' > /app/download_model.py && chmod +x /app/download_model.py
 
-# Create a runpod_start.sh script to properly handle both API and serverless modes
+# Create a simpler startup script for serverless mode only
 RUN echo '#!/bin/bash\n\
-\n\
-# Function to check if model exists locally\n\
-check_model() {\n\
-  if [[ ! -f "${MODEL_PATH}/config.json" ]]; then\n\
-    echo "Model files not found in ${MODEL_PATH}. Attempting to download..."\n\
-    python /app/download_model.py\n\
-  else\n\
-    echo "Model files found in ${MODEL_PATH}"\n\
-  fi\n\
-}\n\
 \n\
 # Ensure the volume directories exist\n\
 mkdir -p /runpod-volume/models /runpod-volume/cache /runpod-volume/huggingface /runpod-volume/torch\n\
 \n\
-# Check for model files\n\
-check_model\n\
-\n\
-# Start the appropriate service\n\
-if [[ -n "$RUNPOD_SERVERLESS" && "$RUNPOD_SERVERLESS" == "1" ]]; then\n\
-  echo "Starting in RunPod serverless mode..."\n\
-  python handler.py\n\
+# Check for model files and download if missing\n\
+if [[ ! -f "${MODEL_PATH}/config.json" ]]; then\n\
+  echo "Model files not found in ${MODEL_PATH}. Attempting to download..."\n\
+  python /app/download_model.py\n\
 else\n\
-  echo "Starting in API mode..."\n\
-  python -m uvicorn main:app --host 0.0.0.0 --port 3000\n\
+  echo "Model files found in ${MODEL_PATH}"\n\
 fi\n\
+\n\
+# Start the RunPod serverless handler\n\
+echo "Starting RunPod serverless handler..."\n\
+exec python handler.py\n\
 ' > /app/runpod_start.sh && chmod +x /app/runpod_start.sh
-
-# Default port for API mode (RunPod serverless uses port 8000 automatically)
-EXPOSE 3000
 
 # Create volume mounts for persistent storage
 VOLUME ["/runpod-volume/models", "/runpod-volume/cache", "/runpod-volume/huggingface", "/runpod-volume/torch"]
 
-# Set entrypoint
+# Set entrypoint to the serverless-only startup script
 ENTRYPOINT ["/app/runpod_start.sh"]
