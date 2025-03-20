@@ -151,8 +151,21 @@ def handler(event):
         full_source_lang = source_lang_info.full_code_with_suffix
         full_target_lang = target_lang_info.full_code_with_suffix
         
+        # Log to help with troubleshooting
+        logger.info(f"Using source language: {source_lang} → {full_source_lang}")
+        logger.info(f"Using target language: {target_lang} → {full_target_lang}")
+        
         # Prepare for translation
         tokenizer.src_lang = full_source_lang
+        
+        # Verify both language codes are in tokenizer's vocabulary
+        if full_source_lang not in tokenizer.lang_code_to_id:
+            logger.error(f"Source language code {full_source_lang} not found in tokenizer vocabulary")
+            return {"error": f"Source language '{source_lang}' is not supported by the translation model"}
+            
+        if full_target_lang not in tokenizer.lang_code_to_id:
+            logger.error(f"Target language code {full_target_lang} not found in tokenizer vocabulary")
+            return {"error": f"Target language '{target_lang}' is not supported by the translation model"}
         
         # Tokenize with safety limit on input text length
         max_length = 512  # Safe maximum for most models
@@ -165,7 +178,10 @@ def handler(event):
         forced_bos_token_id = tokenizer.lang_code_to_id.get(full_target_lang)
         
         if forced_bos_token_id is None:
+            logger.error(f"Could not get forced_bos_token_id for target language {full_target_lang}")
             return {"error": f"Invalid target language code: {target_lang}"}
+        
+        logger.info(f"Using forced_bos_token_id={forced_bos_token_id} for target language {full_target_lang}")
         
         # Move tensors to GPU if using CUDA
         if DEVICE == "cuda":

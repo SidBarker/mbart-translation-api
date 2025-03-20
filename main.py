@@ -203,7 +203,12 @@ def detect_language(text):
         # Map to mBART language code
         mbart_lang_code = lang_mapping.get(detected_lang)
         if mbart_lang_code is None:
-            logger.warning(f"Language {detected_lang} not supported by mBART, falling back to English")
+            logger.warning(f"Language {detected_lang} not mapped to an mBART language code, falling back to English")
+            return "en"
+        
+        # Verify the mapped code exists in our supported languages
+        if mbart_lang_code not in lang_suffix_map:
+            logger.warning(f"Mapped language code {mbart_lang_code} not found in supported mBART languages, falling back to English")
             return "en"
             
         return mbart_lang_code

@@ -20,6 +20,29 @@ The solution uses the [facebook/mbart-large-50-many-to-many-mmt](https://hugging
 
 Arabic (ar_AR), Czech (cs_CZ), German (de_DE), English (en_XX), Spanish (es_XX), Estonian (et_EE), Finnish (fi_FI), French (fr_XX), Gujarati (gu_IN), Hindi (hi_IN), Italian (it_IT), Japanese (ja_XX), Kazakh (kk_KZ), Korean (ko_KR), Lithuanian (lt_LT), Latvian (lv_LV), Burmese (my_MM), Nepali (ne_NP), Dutch (nl_XX), Romanian (ro_RO), Russian (ru_RU), Sinhala (si_LK), Turkish (tr_TR), Vietnamese (vi_VN), Chinese (zh_CN), Afrikaans (af_ZA), Azerbaijani (az_AZ), Bengali (bn_IN), Persian (fa_IR), Hebrew (he_IL), Croatian (hr_HR), Indonesian (id_ID), Georgian (ka_GE), Khmer (km_KH), Macedonian (mk_MK), Malayalam (ml_IN), Mongolian (mn_MN), Marathi (mr_IN), Polish (pl_PL), Pashto (ps_AF), Portuguese (pt_XX), Swedish (sv_SE), Swahili (sw_KE), Tamil (ta_IN), Telugu (te_IN), Thai (th_TH), Tagalog (tl_XX), Ukrainian (uk_UA), Urdu (ur_PK), Xhosa (xh_ZA), Galician (gl_ES), Slovene (sl_SI)
 
+### Language Code Usage
+
+When using the API, you should use the two-letter language codes (like "en", "fr", "de") in your requests. These short codes will be automatically converted to the full mBART language codes (e.g., "en_XX", "fr_XX") internally.
+
+The automatic language detection will attempt to identify the source language of your text and map it to the appropriate mBART language code. If the detected language is not supported by mBART, it will fall back to English.
+
+### Troubleshooting Common Issues
+
+1. **Text Not Being Translated**: If you receive a response where the translated text is the same as the input, check:
+   - The source and target languages are different
+   - Both languages are in the supported languages list
+   - The language detection is correctly identifying your source text (check logs)
+
+2. **Language Detection Issues**: If automatic language detection isn't working properly:
+   - Provide the source language explicitly in your request
+   - Make sure your input text is long enough for reliable detection (at least a few words)
+   - Check the logs for language detection warnings or errors
+
+3. **Error Messages**: Common error messages and their solutions:
+   - "Language X not found in supported mBART languages": Use one of the supported language codes listed above
+   - "Invalid target language code": Make sure you're using a two-letter language code from the supported list
+   - "Source/Target language not supported by the translation model": The language is not in mBART's vocabulary
+
 ## Model Loading Behavior
 
 The serverless handler can load the mBART model in two ways:
