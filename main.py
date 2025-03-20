@@ -16,14 +16,38 @@ logger = logging.getLogger(__name__)
 
 SETTINGS = Settings()
 
-logger.info(f'model_path: {SETTINGS.model_path}')
+DEFAULT_MODEL_ID = "facebook/mbart-large-50-many-to-many-mmt"
+MODEL_PATH = SETTINGS.model_path
+
+# Check if the model path exists and contains model files
+def is_valid_model_path(path):
+    if not os.path.exists(path):
+        logger.warning(f"Model path {path} does not exist")
+        return False
+    
+    # Check for typical model files
+    config_file = os.path.join(path, "config.json")
+    if not os.path.exists(config_file):
+        logger.warning(f"No config.json found in {path}")
+        return False
+    
+    logger.info(f"Found valid model directory at {path}")
+    return True
+
+# Determine the actual model path to use
+if MODEL_PATH != DEFAULT_MODEL_ID and not is_valid_model_path(MODEL_PATH):
+    logger.warning(f"Invalid model path {MODEL_PATH}, falling back to Hugging Face model {DEFAULT_MODEL_ID}")
+    MODEL_PATH = DEFAULT_MODEL_ID
+
+logger.info(f'model_path: {MODEL_PATH}')
 
 # Check if DEVICE is set and not empty
 DEVICE = getattr(SETTINGS, 'device', 'cuda' if torch.cuda.is_available() else 'cpu')
 logger.info(f'DEVICE: {DEVICE}')
 
-model = MBartForConditionalGeneration.from_pretrained(SETTINGS.model_path).to(SETTINGS.device)
-tokenizer = MBart50TokenizerFast.from_pretrained(SETTINGS.model_path)
+# Load the models
+model = MBartForConditionalGeneration.from_pretrained(MODEL_PATH).to(DEVICE)
+tokenizer = MBart50TokenizerFast.from_pretrained(MODEL_PATH)
 
 class TranslationRequest(BaseModel):
     source_lang: str = Field(None, description="Source language code (optional - will be auto-detected if not provided)")
@@ -260,4 +284,4 @@ async def translate_text(request: TranslationRequest):
     }
 
 if __name__ == "__main__":
-    run(app, host="0.0.0.0", port=23129)
+    run(app, host="0.0.0.0", port=3000)

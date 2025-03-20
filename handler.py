@@ -5,6 +5,7 @@ import torch
 import logging
 import sys
 from transformers import MBartForConditionalGeneration, MBart50TokenizerFast
+import glob
 
 # Configure logging
 logging.basicConfig(
@@ -14,8 +15,29 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Get environment variables
-MODEL_PATH = os.environ.get("MODEL_PATH", "facebook/mbart-large-50-many-to-many-mmt")
+DEFAULT_MODEL_ID = "facebook/mbart-large-50-many-to-many-mmt"
+MODEL_PATH = os.environ.get("MODEL_PATH", DEFAULT_MODEL_ID)
 DEVICE = os.environ.get("DEVICE", "cuda" if torch.cuda.is_available() else "cpu")
+
+# Check if the model path exists and contains model files
+def is_valid_model_path(path):
+    if not os.path.exists(path):
+        logger.warning(f"Model path {path} does not exist")
+        return False
+    
+    # Check for typical model files
+    config_file = os.path.join(path, "config.json")
+    if not os.path.exists(config_file):
+        logger.warning(f"No config.json found in {path}")
+        return False
+    
+    logger.info(f"Found valid model directory at {path}")
+    return True
+
+# Determine the actual model path to use
+if MODEL_PATH != DEFAULT_MODEL_ID and not is_valid_model_path(MODEL_PATH):
+    logger.warning(f"Invalid model path {MODEL_PATH}, falling back to Hugging Face model {DEFAULT_MODEL_ID}")
+    MODEL_PATH = DEFAULT_MODEL_ID
 
 logger.info(f"Initializing with model: {MODEL_PATH} on device: {DEVICE}")
 
