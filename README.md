@@ -14,6 +14,7 @@ The solution uses the [facebook/mbart-large-50-many-to-many-mmt](https://hugging
 - GPU acceleration support
 - Docker containerization for easy deployment on RunPod.io
 - Configurable debugging via environment variables
+- Optimized for RunPod.io serverless deployment
 
 ## Supported Languages
 
@@ -31,25 +32,82 @@ pip install -r requirements.txt
 export MODEL_PATH=/path/to/model
 export DEVICE=cuda  # or cpu if no GPU available
 export DEBUG=true   # optional for debug logging
-uvicorn main:app --host 0.0.0.0 --port 23129
+uvicorn main:app --host 0.0.0.0 --port 3000
 ```
 
 ### Docker Build and Run
 
 ```bash
 docker build -t mbart-translation-api .
-docker run -p 23129:23129 -v /path/to/models:/data/models mbart-translation-api
+docker run -p 3000:3000 -v /path/to/models:/runpod-volume/models mbart-translation-api
 ```
 
 ### For GPU support
 
 ```bash
-docker run --gpus all -p 23129:23129 -v /path/to/models:/data/models mbart-translation-api
+docker run --gpus all -p 3000:3000 -v /path/to/models:/runpod-volume/models mbart-translation-api
 ```
 
-## API Endpoints
+## RunPod.io Serverless Deployment
 
-The API is accessible at http://localhost:23129/docs which provides Swagger UI documentation.
+This solution is optimized for RunPod.io serverless deployment. To deploy to RunPod:
+
+1. Build and push your Docker image to a registry (Docker Hub, GHCR, etc.)
+   ```bash
+   docker build -t yourusername/mbart-translation-api:latest .
+   docker push yourusername/mbart-translation-api:latest
+   ```
+
+2. In the RunPod.io serverless UI:
+   - Create a new serverless template
+   - Enter your container image URL
+   - Set appropriate GPU type based on your needs (recommend at least 8GB VRAM)
+   - Set environment variables if needed (MODEL_PATH is set to /runpod-volume/models by default)
+   - Create a volume to store models and attach it to /runpod-volume
+
+3. Deploy your serverless container
+   - When your template is created, deploy it as a serverless function
+   - RunPod will handle scaling based on traffic
+
+### Testing the RunPod Handler
+
+You can test the handler locally before deploying to RunPod:
+
+```bash
+python runpod_test.py
+```
+
+### RunPod API Request Format
+
+When using the RunPod API endpoint, your requests should follow this format:
+
+```json
+{
+  "input": {
+    "text": "Hello world, how are you today?",
+    "target_lang": "fr",
+    "source_lang": "en"  // Optional - will auto-detect if not provided
+  }
+}
+```
+
+The response will be in this format:
+
+```json
+{
+  "output": {
+    "source_lang": "en",
+    "detected": false,
+    "target_lang": "fr",
+    "text": "Hello world, how are you today?",
+    "translated_text": "Bonjour le monde, comment allez-vous aujourd'hui?"
+  }
+}
+```
+
+## API Endpoints (Web Mode)
+
+The API is accessible at http://localhost:3000/docs which provides Swagger UI documentation.
 
 ### Main Endpoints:
 
@@ -67,12 +125,12 @@ See `api_request.py` for example API usage:
 import requests
 
 # Auto-detect source language
-response = requests.post("http://localhost:23129/v1/lang/translate", 
+response = requests.post("http://localhost:3000/v1/lang/translate", 
                          json={"target_lang": "en", "text": "Bonjour le monde"})
 print(response.json())
 
 # Specify source language
-response = requests.post("http://localhost:23129/v1/lang/translate", 
+response = requests.post("http://localhost:3000/v1/lang/translate", 
                          json={"source_lang": "fr", "target_lang": "es", "text": "Bonjour le monde"})
 print(response.json())
 ```
