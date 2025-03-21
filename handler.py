@@ -171,8 +171,11 @@ def handler(event):
         max_length = 512  # Safe maximum for most models
         input_text = text[:max_length] if len(text) > max_length else text
         
+        # Prepend source language code to input text (REQUIRED by mBART)
+        mbart_text = f"{full_source_lang} {input_text}"
+        
         tokenize_start = time.time()
-        encoded_text = tokenizer(input_text, return_tensors="pt")
+        encoded_text = tokenizer(mbart_text, return_tensors="pt")
         tokenize_time = time.time() - tokenize_start
         
         forced_bos_token_id = tokenizer.lang_code_to_id.get(full_target_lang)
