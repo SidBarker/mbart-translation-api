@@ -193,7 +193,6 @@ def handler(event):
             generated_tokens = model.generate(
                 **encoded_text,
                 forced_bos_token_id=forced_bos_token_id,
-                decoder_start_token_id=tokenizer.eos_token_id,  # Use eos_token_id as the decoder_start_token_id
                 max_length=1024,  # Safe maximum for output length
                 num_beams=4,      # Beam search for better quality
             )
