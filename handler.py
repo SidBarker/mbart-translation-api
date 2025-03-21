@@ -155,9 +155,6 @@ def handler(event):
         logger.info(f"Using source language: {source_lang} → {full_source_lang}")
         logger.info(f"Using target language: {target_lang} → {full_target_lang}")
         
-        # Prepare for translation
-        tokenizer.src_lang = full_source_lang
-        
         # Verify both language codes are in tokenizer's vocabulary
         if full_source_lang not in tokenizer.lang_code_to_id:
             logger.error(f"Source language code {full_source_lang} not found in tokenizer vocabulary")
@@ -171,11 +168,11 @@ def handler(event):
         max_length = 512  # Safe maximum for most models
         input_text = text[:max_length] if len(text) > max_length else text
         
-        # Prepend source language code to input text (REQUIRED by mBART)
-        mbart_text = f"{full_source_lang} {input_text}"
+        # Set source language - this automatically handles the language token
+        tokenizer.src_lang = full_source_lang
         
         tokenize_start = time.time()
-        encoded_text = tokenizer(mbart_text, return_tensors="pt")
+        encoded_text = tokenizer(input_text, return_tensors="pt")
         tokenize_time = time.time() - tokenize_start
         
         forced_bos_token_id = tokenizer.lang_code_to_id.get(full_target_lang)
@@ -196,6 +193,7 @@ def handler(event):
             generated_tokens = model.generate(
                 **encoded_text,
                 forced_bos_token_id=forced_bos_token_id,
+                decoder_start_token_id=tokenizer.eos_token_id,  # Use eos_token_id as the decoder_start_token_id
                 max_length=1024,  # Safe maximum for output length
                 num_beams=4,      # Beam search for better quality
             )
@@ -237,3 +235,4 @@ logger.info("RunPod handler initialization complete, ready to process requests")
 
 # Start the RunPod serverless handler
 runpod.serverless.start({"handler": handler}) 
+
